@@ -29,12 +29,13 @@ typedef unsigned int uint32_t;
 #endif
 
 void geoiplookup(GeoIP * gi, char *hostname, int i);
+void geoiplookupfile(GeoIP * gi, char *host_file, int i);
 
 void usage()
 {
     fprintf(
         stderr,
-        "Usage: geoiplookup [-h] [-?] [-d custom_dir] [-f custom_file] [-v] [-i] [-l] <ipaddress|hostname>\n");
+        "Usage: geoiplookup [-h] [-?] [-d custom_dir] [-f custom_file] [-v] [-i] [-l] [-file host_file] [-host ipaddress|hostname]\n");
 }
 
 /* extra info used in _say_range_ip */
@@ -43,6 +44,7 @@ int info_flag = 0;
 int main(int argc, char *argv[])
 {
     char * hostname = NULL;
+    char * host_file = NULL;
     char * db_info;
     GeoIP * gi;
     int i;
@@ -77,12 +79,23 @@ int main(int argc, char *argv[])
                 i++;
                 custom_directory = argv[i];
             }
+        } else if (strcmp(argv[i], "-file") == 0) {
+            if ((i + 1) < argc) {
+                i++;
+                host_file = argv[i];
+            }
+        } else if (strcmp(argv[i], "-host") == 0) {
+            if ((i + 1) < argc) {
+                i++;
+                hostname = argv[i];
+            }
         } else {
-            hostname = argv[i];
+          usage();
+          exit(1);
         }
         i++;
     }
-    if (hostname == NULL) {
+    if (hostname == NULL && host_file == NULL) {
         usage();
         exit(1);
     }
@@ -106,7 +119,11 @@ int main(int argc, char *argv[])
                        db_info == NULL ? "" : db_info );
                 free(db_info);
             } else {
-                geoiplookup(gi, hostname, i);
+                if (hostname) {
+                    geoiplookup(gi, hostname, i);
+                } else {
+                    geoiplookupfile(gi, host_file, i);
+                }
             }
         }
         GeoIP_delete(gi);
@@ -129,7 +146,11 @@ int main(int argc, char *argv[])
                                db_info == NULL ? "" : db_info );
                         free(db_info);
                     } else {
-                        geoiplookup(gi, hostname, i);
+                        if (hostname) {
+                          geoiplookup(gi, hostname, i);
+                        } else {
+                          geoiplookupfile(gi, host_file, i);
+                        }
                     }
                 }
                 GeoIP_delete(gi);
@@ -242,6 +263,25 @@ void _say_range_by_ip(GeoIP * gi, uint32_t ipnum )
     printf( "  network num:  %lu - %lu ::%lu\n", low, hi, last_nm );
 
     GeoIP_range_by_ip_delete(range);
+}
+
+void geoiplookupfile(GeoIP * gi, char *host_file, int i)
+{
+    FILE *file = strcmp("-", host_file) == 0 ? stdin : fopen(host_file, "r");
+    char *line = NULL;
+    ssize_t read;
+    size_t len = 0;
+    if (file == NULL) {
+        printf("Can't open file (%s)\n", host_file);
+        exit(1);
+    }
+    while ((read = getline(&line, &len, file)) != -1) {
+        if (line[read - 1] == '\n') {
+            line[read - 1] = '\0';
+        }
+        geoiplookup(gi, line, i);
+    }
+    fclose(file);
 }
 
 void geoiplookup(GeoIP * gi, char *hostname, int i)
